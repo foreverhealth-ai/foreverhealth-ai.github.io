@@ -1,0 +1,315 @@
+YPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>網課授權碼管理系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .glass { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .video-active { border-color: #3b82f6; background-color: #eff6ff; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800">
+
+    <div id="app" class="max-w-5xl mx-auto p-4 md:p-8">
+        <!-- 導航列 -->
+        <nav class="flex space-x-4 mb-8 border-b border-slate-200">
+            <button onclick="switchTab('client')" id="btn-client" class="pb-2 px-4 font-bold border-b-2 border-blue-500 text-blue-600">課程登入</button>
+            <button onclick="switchTab('admin')" id="btn-admin" class="pb-2 px-4 font-bold text-slate-500 hover:text-blue-500">後台管理</button>
+        </nav>
+
+        <!-- 客戶登入區域 -->
+        <div id="tab-client" class="tab-content active">
+            <div id="login-section" class="glass p-8 rounded-2xl shadow-xl max-w-md mx-auto border border-white">
+                <h2 class="text-2xl font-bold mb-6 text-center text-slate-700">學員登入課程</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 mb-1">請輸入授權碼</label>
+                        <input type="text" id="auth-code-input" class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none transition" placeholder="例如: ABCD-1234">
+                    </div>
+                    <button id="login-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-lg transition transform active:scale-95">
+                        開始上課
+                    </button>
+                    <p id="login-msg" class="text-center text-sm mt-4"></p>
+                </div>
+            </div>
+
+            <!-- 課程內容區域 (登入後顯示) -->
+            <div id="course-content" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
+                <!-- 左側：影片播放與描述 -->
+                <div class="lg:col-span-2 space-y-6">
+                    <div class="bg-white p-4 rounded-2xl shadow-lg border border-slate-100">
+                        <div id="player-container" class="aspect-video bg-black rounded-xl overflow-hidden shadow-inner">
+                            <!-- 預設播放第一課 -->
+                            <iframe id="main-video-player" width="100%" height="100%" src="" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                        </div>
+                        <div class="mt-6">
+                            <h2 id="current-video-title" class="text-2xl font-bold text-slate-800">載入中...</h2>
+                            <p id="current-video-desc" class="text-slate-600 mt-2">請從右側選擇課程進行觀看。</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右側：課程目錄列表 -->
+                <div class="lg:col-span-1">
+                    <div class="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden">
+                        <div class="bg-slate-50 p-4 border-b">
+                            <h3 class="font-bold flex items-center"><span class="mr-2">📚</span> 課程目錄 (共 10 課)</h3>
+                        </div>
+                        <div id="course-list" class="divide-y divide-slate-100 max-h-[600px] overflow-y-auto">
+                            <!-- 課程清單由 JS 動態生成 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 管理員後台區域 -->
+        <div id="tab-admin" class="tab-content">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- 產生授權碼 -->
+                <div class="bg-white p-6 rounded-xl shadow-md border border-slate-100 col-span-1">
+                    <h3 class="font-bold text-lg mb-4">產生新授權碼</h3>
+                    <div class="space-y-4">
+                        <button id="gen-btn" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-2 rounded shadow transition">
+                            隨機產生一個
+                        </button>
+                        <div id="new-code-display" class="p-3 bg-slate-100 rounded text-center font-mono font-bold text-blue-600 hidden"></div>
+                    </div>
+                </div>
+
+                <!-- 監控列表 -->
+                <div class="bg-white p-6 rounded-xl shadow-md border border-slate-100 col-span-2">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-bold text-lg">授權碼使用監控</h3>
+                        <button id="refresh-btn" class="text-sm text-blue-500 hover:underline">重新整理</button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead>
+                                <tr class="bg-slate-50 border-b">
+                                    <th class="py-2 px-3">授權碼</th>
+                                    <th class="py-2 px-3">使用次數</th>
+                                    <th class="py-2 px-3">最後登入時間</th>
+                                    <th class="py-2 px-3">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="logs-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, deleteDoc, collection, getDocs, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase 配置
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'course-app-001';
+
+        // --- 課程資料設定區域 ---
+        // 請在此處填入您的 YouTube 影片 ID 或連結
+        const courseData = [
+            { id: 1, title: "第一課：中藥養生自療師基礎課程", desc: "認識五行的核心概念。", videoUrl: "https://www.youtube.com/embed/https://youtu.be/WQYtYbTHsCI" },
+            { id: 2, title: "第二課：中藥養生自療師基礎課程", desc: "深入探討時間治療。", videoUrl: "https://www.youtube.com/embed/https://youtu.be/0Lv2giPQ_5Y" },
+            { id: 3, title: "第三課：中藥養生自療師基礎課程", desc: "學習四診方法。", videoUrl: "https://www.youtube.com/embed/https://youtu.be/IHOx8ZqwnR4" },
+            { id: 4, title: "第四課：中藥養生自療師基礎課程", desc: "六淫（六種致病原因）。", videoUrl: "https://www.youtube.com/embed/https://youtu.be/L_qJQeA0_d4" },
+            { id: 5, title: "第五課：中藥養生自療師基礎課程", desc: "七情（致病內因）。", videoUrl: "https://www.youtube.com/embed/https://youtu.be/qLRgpoLtaHo" },
+            { id: 6, title: "第六課：中藥養生自療師基礎課程", desc: "未上架。", videoUrl: "https://www.youtube.com/embed/影片ID6" },
+            { id: 7, title: "第七課：中藥養生自療師基礎課程", desc: "未上架。", videoUrl: "https://www.youtube.com/embed/影片ID7" },
+            { id: 8, title: "第八課：中藥養生自療師基礎課程", desc: "未上架。", videoUrl: "https://www.youtube.com/embed/影片ID8" },
+            { id: 9, title: "第九課：中藥養生自療師基礎課程", desc: "未上架。", videoUrl: "https://www.youtube.com/embed/影片ID9" },
+            { id: 10, title: "第十課：中藥養生自療師基礎課程", desc: "未上架。", videoUrl: "https://www.youtube.com/embed/影片ID10" }
+        ];
+
+        let currentUser = null;
+
+        // 初始化驗證
+        const initAuth = async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Auth Error", error);
+            }
+        };
+
+        onAuthStateChanged(auth, (user) => {
+            currentUser = user;
+            if (user && document.getElementById('tab-admin').classList.contains('active')) {
+                refreshLogs();
+            }
+        });
+
+        // 切換分頁
+        window.switchTab = (tab) => {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.getElementById(`tab-${tab}`).classList.add('active');
+            
+            const clientBtn = document.getElementById('btn-client');
+            const adminBtn = document.getElementById('btn-admin');
+            if(tab === 'client') {
+                clientBtn.classList.add('border-b-2', 'border-blue-500', 'text-blue-600');
+                adminBtn.classList.remove('border-b-2', 'border-blue-500', 'text-blue-600');
+            } else {
+                adminBtn.classList.add('border-b-2', 'border-blue-500', 'text-blue-600');
+                clientBtn.classList.remove('border-b-2', 'border-blue-500', 'text-blue-600');
+                if (currentUser) refreshLogs();
+            }
+        };
+
+        // 渲染課程清單
+        const renderCourseList = () => {
+            const listEl = document.getElementById('course-list');
+            listEl.innerHTML = '';
+            courseData.forEach((course, index) => {
+                const item = document.createElement('div');
+                item.className = `p-4 cursor-pointer hover:bg-slate-50 transition flex items-center ${index === 0 ? 'video-active' : ''}`;
+                item.id = `course-item-${course.id}`;
+                item.onclick = () => playVideo(course.id);
+                item.innerHTML = `
+                    <div class="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold mr-3 shrink-0">
+                        ${course.id}
+                    </div>
+                    <div>
+                        <div class="font-medium text-sm text-slate-800">${course.title}</div>
+                    </div>
+                `;
+                listEl.appendChild(item);
+            });
+            // 預設播放第一堂課
+            playVideo(courseData[0].id);
+        };
+
+        // 播放影片函數
+        window.playVideo = (id) => {
+            const course = courseData.find(c => c.id === id);
+            if (!course) return;
+
+            // 更新播放器內容
+            document.getElementById('main-video-player').src = course.videoUrl;
+            document.getElementById('current-video-title').innerText = course.title;
+            document.getElementById('current-video-desc').innerText = course.desc;
+
+            // 更新列表 UI 選取狀態
+            document.querySelectorAll('#course-list > div').forEach(el => el.classList.remove('video-active'));
+            document.getElementById(`course-item-${id}`).classList.add('video-active');
+        };
+
+        // 客戶登入
+        const handleLogin = async () => {
+            const code = document.getElementById('auth-code-input').value.trim().toUpperCase();
+            const msgEl = document.getElementById('login-msg');
+
+            if (!code) {
+                showMessage(msgEl, "請輸入授權碼", "text-red-500");
+                return;
+            }
+
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'licenses', code);
+                const docSnap = await getDoc(docRef);
+
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    await updateDoc(docRef, {
+                        usageCount: (data.usageCount || 0) + 1,
+                        lastLogin: Timestamp.now()
+                    });
+
+                    showMessage(msgEl, "驗證成功！", "text-green-500");
+                    document.getElementById('login-section').classList.add('hidden');
+                    document.getElementById('course-content').classList.remove('hidden');
+                    renderCourseList();
+                } else {
+                    showMessage(msgEl, "無效的授權碼，請聯繫客服。", "text-red-500");
+                }
+            } catch (e) {
+                console.error(e);
+                showMessage(msgEl, "系統錯誤，請稍後再試。", "text-red-500");
+            }
+        };
+
+        // 管理員：產生代碼
+        const generateCode = async () => {
+            if (!currentUser) return;
+            const newCode = Array.from({length: 8}, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 32)]).join('');
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'licenses', newCode);
+                await setDoc(docRef, {
+                    code: newCode,
+                    createdAt: Timestamp.now(),
+                    usageCount: 0,
+                    lastLogin: null,
+                    status: 'active'
+                });
+                const display = document.getElementById('new-code-display');
+                display.innerText = newCode;
+                display.classList.remove('hidden');
+                refreshLogs();
+            } catch (e) { console.error(e); }
+        };
+
+        // 管理員：刷新清單
+        const refreshLogs = async () => {
+            if (!currentUser) return;
+            const tableBody = document.getElementById('logs-table-body');
+            tableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-slate-400">載入中...</td></tr>';
+            try {
+                const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'licenses');
+                const querySnapshot = await getDocs(colRef);
+                tableBody.innerHTML = '';
+                querySnapshot.forEach((docSnap) => {
+                    const data = docSnap.data();
+                    const lastLoginStr = data.lastLogin ? data.lastLogin.toDate().toLocaleString('zh-TW') : '從未登入';
+                    const tr = document.createElement('tr');
+                    tr.className = "border-b hover:bg-slate-50";
+                    tr.innerHTML = `
+                        <td class="py-3 px-3 font-mono font-bold">${data.code}</td>
+                        <td class="py-3 px-3">${data.usageCount} 次</td>
+                        <td class="py-3 px-3 text-xs text-slate-500">${lastLoginStr}</td>
+                        <td class="py-3 px-3">
+                            <button onclick="deleteLicense('${data.code}')" class="text-red-500 hover:text-red-700">刪除</button>
+                        </td>
+                    `;
+                    tableBody.appendChild(tr);
+                });
+                if (querySnapshot.empty) tableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-slate-400">尚無授權碼數據</td></tr>';
+            } catch (e) { console.error(e); }
+        };
+
+        window.deleteLicense = async (code) => {
+            if(!confirm(`確定要刪除授權碼 ${code}？`)) return;
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'licenses', code);
+                await deleteDoc(docRef);
+                refreshLogs();
+            } catch (e) { console.error(e); }
+        };
+
+        function showMessage(el, text, colorClass) {
+            el.innerText = text;
+            el.className = `text-center text-sm mt-4 ${colorClass}`;
+        }
+
+        document.getElementById('login-btn').addEventListener('click', handleLogin);
+        document.getElementById('gen-btn').addEventListener('click', generateCode);
+        document.getElementById('refresh-btn').addEventListener('click', refreshLogs);
+
+        initAuth();
+    </script>
+</body>
+</html>
