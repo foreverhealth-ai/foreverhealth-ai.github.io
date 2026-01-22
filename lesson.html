@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>示範課程頁面</title>
+  <style>
+    body { font-family:-apple-system, "Noto Sans CJK TC", "Segoe UI", Roboto, Arial; padding:20px; max-width:900px; margin:auto; }
+    .protected { background:#fff5f5; border:1px solid #ffd0d0; padding:16px; border-radius:6px; }
+    .content { background:#f6fff6; border:1px solid #cfeecf; padding:16px; border-radius:6px; }
+  </style>
+</head>
+<body>
+  <h1>課程內容（示範）</h1>
+
+  <div id="main"></div>
+
+  <script>
+    // lesson protector: 若 URL 含有 ?pwd=... 就視為有權限顯示內容（warning: 非安全機制）
+    (function(){
+      function getParam(name){
+        const params = new URLSearchParams(window.location.search);
+        return params.get(name);
+      }
+      const pwd = getParam('pwd');
+      const main = document.getElementById('main');
+
+      if (pwd && pwd.length>=6) {
+        // 顯示實際課程內容
+        const box = document.createElement('div');
+        box.className = 'content';
+        box.innerHTML = `<p>已檢測到密碼。歡迎進入課程內容（此處為範例正文）。</p>\n        <p><strong>提示：</strong>若要分享連結，請使用管理後台產生的完整連結（包含 ?pwd=... 參數）。</p>`;
+        main.appendChild(box);
+      } else {
+        const box = document.createElement('div');
+        box.className = 'protected';
+        box.innerHTML = `<p>本頁受保護。請從後台取得含密碼的連結後開啟。</p>\n        <p>或在位址列加上 <code>?pwd=你的密碼</code> 參數（由後台生成）。</p>`;
+        main.appendChild(box);
+      }
+    })();
+  </script>
+</body>
+</html>

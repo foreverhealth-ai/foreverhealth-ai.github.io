@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>後台管理 — 生成課程連結</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans CJK TC", "Helvetica Neue", Arial; padding: 20px; max-width:900px; margin:auto; }
+    h1 { margin-bottom: 8px; }
+    .lesson { display:flex; gap:8px; align-items:center; margin:6px 0; }
+    input.link { width:100%; }
+    button { cursor:pointer; }
+    pre { background:#f6f8fa; padding:10px; border-radius:6px; overflow:auto; }
+  </style>
+</head>
+<body>
+  <h1>後台管理 — 生成課程連結</h1>
+  <p>說明：按「生成 10 個連結」會為 lesson1 ~ lesson10 產生隨機密碼（以 URL 參數形式附加）。把產生的連結分享給學生即可。這是純靜態前端方案，非安全性保證（密碼會在 URL 中出現）。</p>
+
+  <div>
+    <label>
+      課程路徑基底（預設：lessonX.html，會替換 X 為 1~10）：
+      <input id="basePath" value="lesson{n}.html" style="width: 220px;" />
+    </label>
+    <label style="margin-left:12px;">
+      密碼長度：
+      <input id="pwdLen" type="number" value="10" min="6" max="64" style="width:70px;" />
+    </label>
+  </div>
+
+  <p style="margin-top:12px;">
+    <button id="generateBtn">生成 10 個連結</button>
+    <button id="copyAllBtn">複製全部連結</button>
+    <button id="downloadCsvBtn">匯出 CSV</button>
+    <button id="clearBtn" title="清除 localStorage 儲存的 mapping">清除儲存</button>
+  </p>
+
+  <div id="list"></div>
+
+  <h3>備註</h3>
+  <ul>
+    <li>使用者若直接開啟 lessonX.html 且網址不包含 <code>?pwd=...</code>，頁面會顯示被保護訊息（見 lesson 範本）；若連結中有 <code>pwd</code> 參數則會直接顯示內容。</li>
+    <li>要讓該機制「能工作並持久供應連結」，只需確保 lesson1..lesson10 的 HTML 範本包含對 <code>pwd</code> 的檢查（下面提供範本）。</li>
+    <li>若需要我幫你把檔案直接推到 GitHub（你的 repo: foreverhealth-ai/foreverhealth-ai.github.io），請回覆「請幫我推上 repo」，我會請求將進行寫入（需要你授權）。</li>
+  </ul>
+
+  <script>
+    // admin.js inline — 生成隨機 token 並顯示連結、儲存到 localStorage
+    (function(){
+      const generateBtn = document.getElementById('generateBtn');
+      const copyAllBtn = document.getElementById('copyAllBtn');
+      const downloadCsvBtn = document.getElementById('downloadCsvBtn');
+      const clearBtn = document.getElementById('clearBtn');
+      const list = document.getElementById('list');
+      const basePathInput = document.getElementById('basePath');
+      const pwdLenInput = document.getElementById('pwdLen');
+
+      function randomToken(len){
+        // 使用 Web Crypto 產生較安全的隨機字串（base62）
+        const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        const bytes = new Uint8Array(len);
+        crypto.getRandomValues(bytes);
+        let s = '';
+        for (let i = 0; i < len; i++) s += alphabet[bytes[i] % alphabet.length];
+        return s;
+      }
+
+      function makeLinkForLesson(basePattern, n, pwd){
+        const filename = basePattern.replace('{n}', n);
+        const url = new URL(window.location.href);
+        // 若 site 被部署在子目錄，使用 origin + pathname 的目錄部分
+        const origin = url.origin + url.pathname.replace(/\/[^\/]*$/, '/');
+        // 保證 filename 不以 / 開頭
+        const path = filename.replace(/^\/+/,'');
+        return origin + path + '?pwd=' + encodeURIComponent(pwd);
+      }
+
+      function saveMapping(mapping){
+        localStorage.setItem('fh_lesson_tokens', JSON.stringify(mapping));
+      }
+
+      function loadMapping(){
+        try { return JSON.parse(localStorage.getItem('fh_lesson_tokens')||'{}'); }
+        catch(e){ return {}; }
+      }
+
+      function render(mapping){
+        list.innerHTML = '';
+        const ul = document.createElement('div');
+        Object.keys(mapping).sort((a,b)=>Number(a)-Number(b)).forEach(k=>{
+          const data = mapping[k];
+          const row = document.createElement('div');
+          row.className = 'lesson';
+          const label = document.createElement('div');
+          label.style.width='110px';
+          label.textContent = 'Lesson ' + k;
+          const input = document.createElement('input');
+          input.className = 'link';
+          input.value = data.link;
+          input.readOnly = true;
+          const copyBtn = document.createElement('button');
+          copyBtn.textContent='複製';
+          copyBtn.onclick = ()=>{ navigator.clipboard.writeText(data.link); copyBtn.textContent='已複製'; setTimeout(()=>copyBtn.textContent='複製',1300); };
+          row.appendChild(label);
+          row.appendChild(input);
+          row.appendChild(copyBtn);
+          ul.appendChild(row);
+        });
+        list.appendChild(ul);
+      }
+
+      generateBtn.addEventListener('click', ()=>{
+        const len = Math.max(6, Math.min(64, Number(pwdLenInput.value)||10));
+        const basePattern = (basePathInput.value||'lesson{n}.html').trim();
+        const mapping = {};
+        for (let i=1;i<=10;i++){
+          const pwd = randomToken(len);
+          const link = makeLinkForLesson(basePattern,i,pwd);
+          mapping[i] = { pwd, link, lesson: basePattern.replace('{n}', i) };
+        }
+        saveMapping(mapping);
+        render(mapping);
+      });
+
+      copyAllBtn.addEventListener('click', async ()=>{
+        const mapping = loadMapping();
+        const lines = Object.keys(mapping).sort().map(k => `${mapping[k].lesson},${mapping[k].pwd},${mapping[k].link}`);
+        if(lines.length===0) return alert('尚未生成任何連結');
+        const text = 'lesson,file_pwd,link\n' + lines.join('\n');
+        try {
+          await navigator.clipboard.writeText(text);
+          alert('已複製 CSV 內容到剪貼簿');
+        } catch(e){
+          alert('複製失敗，請使用匯出功能下載 CSV');
+        }
+      });
+
+      downloadCsvBtn.addEventListener('click', ()=>{
+        const mapping = loadMapping();
+        const lines = Object.keys(mapping).sort().map(k => `${mapping[k].lesson},${mapping[k].pwd},${mapping[k].link}`);
+        if(lines.length===0) return alert('尚未生成任何連結');
+        const csv = 'lesson,file_pwd,link\n' + lines.join('\n');
+        const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'lesson_links.csv';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      });
+
+      clearBtn.addEventListener('click', ()=>{
+        if(confirm('確定要清除 localStorage 的 mapping 嗎？此操作無法復原。')) {
+          localStorage.removeItem('fh_lesson_tokens');
+          list.innerHTML = '';
+        }
+      });
+
+      // 載入時顯示現有 mapping（若有）
+      document.addEventListener('DOMContentLoaded', ()=>{
+        const mapping = loadMapping();
+        if(Object.keys(mapping).length) render(mapping);
+      });
+    })();
+  </script>
+</body>
+</html>
